@@ -15,6 +15,7 @@
     "bundle": "node scripts/bundle.mjs",
     "cdk": "cdk",
     "deploy": "npm run bundle && cdk deploy",
+    "deploy:ci": "npm run bundle && cdk deploy --require-approval never --ci",
     "synth": "npm run bundle && cdk synth"
   },
   "dependencies": {

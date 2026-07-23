@@ -87,6 +87,35 @@ The stack outputs:
 - **WebAppUrl** — the hosted UI (`…/app/index.html`).
 - **MediaBaseUrl** — base URL for audio + the feed.
 
+## Deploy via GitHub Actions (CI + auto-deploy on `main`)
+
+Two workflows are included:
+
+- **`.github/workflows/ci.yml`** — runs `typecheck` + `test` on every push/PR. No AWS access.
+- **`.github/workflows/deploy.yml`** — on push to `main`, runs the checks then `cdk deploy`,
+  authenticating to AWS with **GitHub OIDC** (assuming an IAM role — no long-lived keys stored).
+
+### One-time AWS setup (the workflow can't do these for you)
+
+1. **Create a GitHub OIDC provider** in IAM for `token.actions.githubusercontent.com`
+   (audience `sts.amazonaws.com`).
+2. **Create an IAM role** the workflow assumes, whose trust policy allows this repo's
+   `main` branch, e.g. condition
+   `token.actions.githubusercontent.com:sub = repo:cocymsc1986/text-to-podcast:ref:refs/heads/main`.
+   Give it permissions to deploy the stack (CloudFormation + Lambda, S3, DynamoDB, API
+   Gateway, EventBridge, IAM, and the CDK bootstrap resources).
+3. **Bootstrap once:** run `npx cdk bootstrap` locally for the target account+region. This
+   is a one-time, elevated-permission step and is intentionally **not** done by the workflow.
+
+### GitHub configuration
+
+- **Secrets:** `AWS_DEPLOY_ROLE_ARN`, `ANTHROPIC_API_KEY`, `APP_SECRET`.
+- **Variables:** `AWS_REGION` (required), plus optional `CLAUDE_MODEL`, `DEFAULT_VOICE`,
+  `POLL_RATE_MINUTES`.
+
+The deploy job runs in a `production` GitHub Environment, so you can add a required-reviewer
+protection rule there if you want a manual approval before each deploy.
+
 ## Use it
 
 1. Open **WebAppUrl**, go to **Settings**, paste the **ApiUrl** and your **APP_SECRET**,
