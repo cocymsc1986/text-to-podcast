@@ -141,3 +141,10 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# AWS CDK
+cdk.out/
+cdk.context.json
+
+# Lambda build output
+dist/
