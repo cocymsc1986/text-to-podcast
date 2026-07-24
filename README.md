@@ -45,7 +45,7 @@ spend Claude/Polly budget on things you actually want as audio. Any feed can be 
 | Scheduled feed polling | EventBridge rule → poller Lambda |
 | Audio, feed XML, web UI | Amazon S3 (public-read; content lives under unguessable paths) |
 | Metadata | DynamoDB (single table + `byType` GSI) |
-| Text-to-speech | Amazon Polly neural, async `StartSpeechSynthesisTask` (MP3 straight to S3) |
+| Text-to-speech | Amazon Polly (`generative` engine by default), async `StartSpeechSynthesisTask` (MP3 straight to S3) |
 | Article → spoken script | Claude API (`claude-sonnet-5` by default) |
 | Article extraction | `@mozilla/readability` + `jsdom` |
 | Infra as code | AWS CDK (TypeScript) |
@@ -75,7 +75,8 @@ npx cdk bootstrap
 export ANTHROPIC_API_KEY=sk-ant-...        # required
 export APP_SECRET=$(openssl rand -hex 16)  # protects the API/UI (recommended)
 export CLAUDE_MODEL=claude-sonnet-5        # or claude-haiku-4-5-20251001 (cheaper)
-export DEFAULT_VOICE=Matthew               # any Polly neural voice
+export DEFAULT_VOICE=Matthew               # any Polly voice for the chosen engine
+export POLLY_ENGINE=generative             # generative | long-form | neural (see below)
 export POLL_RATE_MINUTES=15
 
 npm run deploy   # bundles the Lambdas, then cdk deploy
@@ -111,7 +112,7 @@ Two workflows are included:
 
 - **Secrets:** `AWS_DEPLOY_ROLE_ARN`, `ANTHROPIC_API_KEY`, `APP_SECRET`.
 - **Variables:** `AWS_REGION` (required), plus optional `CLAUDE_MODEL`, `DEFAULT_VOICE`,
-  `POLL_RATE_MINUTES`.
+  `POLLY_ENGINE`, `POLL_RATE_MINUTES`.
 
 The deploy job runs in a `production` GitHub Environment, so you can add a required-reviewer
 protection rule there if you want a manual approval before each deploy.
@@ -142,7 +143,8 @@ npm run synth     # cdk synth (needs ANTHROPIC_API_KEY set)
 |---|---|
 | `GET /items` | List the reading queue |
 | `POST /items` `{ url }` | Add a URL to the queue (extract only) |
-| `POST /items/{id}/convert` | Convert a queued item to audio |
+| `POST /items/{id}/convert` | Convert a queued item to audio (also retries a failed conversion) |
+| `POST /items/{id}/reextract` | Re-run article extraction for a failed item |
 | `PATCH /items/{id}` `{ readState }` | Mark read / archived |
 | `GET /feeds` · `POST /feeds` `{ sourceUrl, autoConvert }` | List / add subscriptions |
 | `PATCH /feeds/{id}` `{ autoConvert, active }` | Update a subscription |
@@ -155,6 +157,30 @@ npm run synth     # cdk synth (needs ANTHROPIC_API_KEY set)
 - Lambda / API Gateway / DynamoDB / EventBridge: effectively AWS free tier for personal use.
 - S3: cents/month (only you download the audio).
 - Polly neural: ~$0.08 per ~5k-char article. Claude (Sonnet): a few cents per article.
+
+## Making the audio sound more human
+
+Two levers, both on by default:
+
+- **Voice engine.** `POLLY_ENGINE=generative` (the default) uses Polly's most
+  lifelike engine — noticeably warmer and less robotic than the older `neural`
+  engine. `long-form` is another natural option tuned for longer content. If a
+  voice or region doesn't support your chosen engine, Polly errors on synthesis;
+  switch `POLLY_ENGINE` (or pick a supported voice) — see the
+  [Polly voice list](https://docs.aws.amazon.com/polly/latest/dg/voicelist.html).
+  Generative/long-form cost a bit more per character than neural.
+- **Script style.** Claude is prompted to write a conversational, contraction-heavy
+  narration with varied sentence length and natural pacing, so the text itself
+  reads like a person talking rather than a document being recited.
+
+## Reliability
+
+- **Auto-refresh.** The queue and episodes tabs poll while anything is fetching,
+  converting, or synthesizing, so items flip to *ready* / *failed* on their own —
+  no manual refresh.
+- **Retries.** The network-bound steps (page fetch, Claude, Polly) retry transient
+  failures with exponential backoff. If a step still fails, the queue shows a
+  **Retry** button (re-extract) or **Retry conversion** so you can re-run it.
 
 ## Notes / limits
 

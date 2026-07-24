@@ -14,6 +14,13 @@ const polly = new PollyClient({});
 // rather than truncating silently on an unusually long piece.
 const MAX_CHARS = 100_000;
 
+// Voice engine. `generative` and `long-form` sound markedly more human than
+// `neural` (more natural intonation, pacing, and emphasis) — default to
+// generative for the most lifelike delivery. Override with POLLY_ENGINE if the
+// chosen voice/region doesn't support it (falls back well to `neural`).
+// See supported voices: https://docs.aws.amazon.com/polly/latest/dg/voicelist.html
+const ENGINE = (process.env.POLLY_ENGINE ?? "generative") as Engine;
+
 export interface SynthesisStarted {
   taskId: string;
   /** Prefix we asked Polly to write under; the final key adds ".<taskId>.mp3". */
@@ -39,7 +46,7 @@ export async function startSynthesis(
       TextType: "text",
       OutputFormat: "mp3",
       VoiceId: voiceId as any,
-      Engine: "neural" as Engine,
+      Engine: ENGINE,
       OutputS3BucketName: BUCKET,
       OutputS3KeyPrefix: outputPrefix,
     }),

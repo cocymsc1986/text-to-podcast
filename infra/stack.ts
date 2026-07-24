@@ -26,6 +26,7 @@ export interface TextToPodcastStackProps extends StackProps {
   appSecret: string;
   claudeModel: string;
   defaultVoice: string;
+  pollyEngine: string;
   pollRateMinutes: number;
 }
 
@@ -78,6 +79,7 @@ export class TextToPodcastStack extends Stack {
       APP_SECRET: props.appSecret,
       CLAUDE_MODEL: props.claudeModel,
       DEFAULT_VOICE: props.defaultVoice,
+      POLLY_ENGINE: props.pollyEngine,
     };
 
     const fn = (name: string, dir: string, timeout = 60) =>
