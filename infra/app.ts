@@ -9,12 +9,14 @@ new TextToPodcastStack(app, "TextToPodcast", {
     account: process.env.CDK_DEFAULT_ACCOUNT,
     region: process.env.CDK_DEFAULT_REGION,
   },
-  // Secrets/config sourced from the deploy environment (see README).
+  // Secrets/config sourced from the deploy environment (see README). Use `||`
+  // (not `??`) so unset GitHub Actions vars, which arrive as empty strings
+  // rather than undefined, fall back to the defaults.
   anthropicApiKey: requireEnv("ANTHROPIC_API_KEY"),
   appSecret: process.env.APP_SECRET ?? "",
-  claudeModel: process.env.CLAUDE_MODEL ?? "claude-sonnet-5",
-  defaultVoice: process.env.DEFAULT_VOICE ?? "Matthew",
-  pollRateMinutes: Number(process.env.POLL_RATE_MINUTES ?? "15"),
+  claudeModel: process.env.CLAUDE_MODEL || "claude-sonnet-5",
+  defaultVoice: process.env.DEFAULT_VOICE || "Matthew",
+  pollRateMinutes: Number(process.env.POLL_RATE_MINUTES) || 15,
 });
 
 function requireEnv(name: string): string {
