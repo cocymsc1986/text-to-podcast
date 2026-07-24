@@ -182,6 +182,26 @@ Two levers, both on by default:
   failures with exponential backoff. If a step still fails, the queue shows a
   **Retry** button (re-extract) or **Retry conversion** so you can re-run it.
 
+## Abuse guards
+
+Because the API reads arbitrary, caller-supplied URLs (and anyone with the URL could
+point it at a hostile page), the pipeline is hardened:
+
+- **SSRF protection.** Every fetched URL — and every redirect hop, plus RSS source
+  feeds — is validated (`src/lib/urlGuard.ts`): only `http`/`https`, no embedded
+  credentials, and never a private, loopback, link-local, or cloud-metadata address
+  (`169.254.169.254`). This stops the Lambda being tricked into fetching internal
+  services on a caller's behalf.
+- **Fetch limits.** Page downloads time out, must be HTML, and are capped at 5 MB, so a
+  giant or streaming response can't exhaust memory (`src/lib/limits.ts`).
+- **Size cap on conversion.** Articles over ~80k characters (roughly 13k words, several
+  times a normal dev article) are refused *before* they reach the Claude prompt or Polly,
+  so a book-length or padded page can't run up cost. Oversized items surface as *failed*
+  with the reason.
+- **Prompt-injection hardening.** Extracted article text is untrusted. It's wrapped in a
+  marked block, breakout attempts are defanged, and the system prompt instructs the model
+  to narrate the content and never obey instructions embedded in it (`src/lib/script.ts`).
+
 ## Notes / limits
 
 - Polly async caps a single task at 100k billed characters — comfortably more than a

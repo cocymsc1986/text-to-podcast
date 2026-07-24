@@ -34,6 +34,19 @@ const json = (statusCode: number, body: unknown): APIGatewayProxyResultV2 => ({
   body: JSON.stringify(body),
 });
 
+// Cheap synchronous shape check so bad input fails with a clear 400. The full
+// SSRF guard (DNS resolution, redirect re-validation) runs later at fetch time.
+const MAX_URL_LEN = 2_048;
+function isHttpUrl(value: unknown): value is string {
+  if (typeof value !== "string" || value.length === 0 || value.length > MAX_URL_LEN) return false;
+  try {
+    const u = new URL(value);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export async function handler(
   event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyResultV2> {
@@ -61,6 +74,7 @@ export async function handler(
       if (parts.length === 1 && method === "GET") return json(200, { items: await listItems() });
       if (parts.length === 1 && method === "POST") {
         if (!body.url) return json(400, { error: "url required" });
+        if (!isHttpUrl(body.url)) return json(400, { error: "url must be a valid http(s) URL" });
         return json(201, { item: await ingestUrl(String(body.url)) });
       }
       if (parts.length === 3 && method === "POST" && parts[2] === "convert") {
@@ -82,6 +96,9 @@ export async function handler(
       if (parts.length === 1 && method === "GET") return json(200, { feeds: await listFeeds() });
       if (parts.length === 1 && method === "POST") {
         if (!body.sourceUrl) return json(400, { error: "sourceUrl required" });
+        if (!isHttpUrl(body.sourceUrl)) {
+          return json(400, { error: "sourceUrl must be a valid http(s) URL" });
+        }
         const feed: Feed = {
           id: newId(),
           type: "rss",

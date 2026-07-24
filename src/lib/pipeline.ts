@@ -2,6 +2,7 @@
 // (A) ingest -> reading queue (always, no audio), (B) convert -> audio (on demand).
 import type { Episode, Feed, Item } from "./types.js";
 import { extractFromUrl } from "./extract.js";
+import { MAX_ARTICLE_CHARS } from "./limits.js";
 import { fetchSourceFeed } from "./rssIn.js";
 import { makeScript } from "./script.js";
 import { startSynthesis } from "./tts.js";
@@ -118,6 +119,19 @@ export async function startConvert(id: string): Promise<Item> {
     throw new Error(`Item ${id} is not extracted yet`);
   }
   if (item.convertState === "queued" || item.convertState === "synthesizing") return item;
+
+  // Abuse guard: keep oversized articles out of the LLM prompt and Polly
+  // entirely. Flag the item so the UI shows why instead of silently spending
+  // budget on a book-length or hostile page.
+  if (item.articleText.length > MAX_ARTICLE_CHARS) {
+    return putItem({
+      ...item,
+      convertState: "failed",
+      error:
+        `Article is ${item.articleText.length.toLocaleString()} characters, over the ` +
+        `${MAX_ARTICLE_CHARS.toLocaleString()}-character limit for conversion.`,
+    });
+  }
 
   const config = await ensureConfig();
   await putItem({ ...item, convertState: "queued", error: undefined });

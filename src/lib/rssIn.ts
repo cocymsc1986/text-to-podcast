@@ -1,5 +1,6 @@
 // Read a source RSS/Atom feed and surface its items for the reading queue.
 import Parser from "rss-parser";
+import { assertSafeUrl } from "./urlGuard.js";
 
 const parser = new Parser({
   headers: {
@@ -22,6 +23,9 @@ export interface SourceFeed {
 }
 
 export async function fetchSourceFeed(url: string): Promise<SourceFeed> {
+  // Validate before handing the URL to rss-parser, which fetches it directly and
+  // would otherwise be an SSRF path into internal/metadata addresses.
+  await assertSafeUrl(url);
   const feed = await parser.parseURL(url);
   return normalize(feed, url);
 }
