@@ -1,0 +1,44 @@
+{
+  "name": "text-to-podcast",
+  "version": "0.1.0",
+  "description": "Turn web articles and RSS feeds into a private podcast feed, on demand. AWS + Claude, no third-party services.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "bundle": "node scripts/bundle.mjs",
+    "cdk": "cdk",
+    "deploy": "npm run bundle && cdk deploy",
+    "deploy:ci": "npm run bundle && cdk deploy --require-approval never --ci",
+    "synth": "npm run bundle && cdk synth"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "@aws-sdk/client-dynamodb": "^3.678.0",
+    "@aws-sdk/client-polly": "^3.678.0",
+    "@aws-sdk/client-s3": "^3.678.0",
+    "@aws-sdk/lib-dynamodb": "^3.678.0",
+    "@mozilla/readability": "^0.5.0",
+    "jsdom": "^25.0.1",
+    "podcast": "^2.0.1",
+    "rss-parser": "^3.13.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.145",
+    "@types/jsdom": "^21.1.7",
+    "@types/node": "^20.16.11",
+    "aws-cdk": "^2.160.0",
+    "aws-cdk-lib": "^2.160.0",
+    "constructs": "^10.3.0",
+    "esbuild": "^0.24.0",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.3"
+  }
+}

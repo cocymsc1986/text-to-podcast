@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Reading Queue → Podcast</title>
+    <style>
+      :root {
+        --bg: #0f1115; --panel: #181b22; --border: #2a2f3a; --text: #e7e9ee;
+        --muted: #9aa3b2; --accent: #6ea8fe; --good: #4ade80; --warn: #fbbf24;
+        --bad: #f87171;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; font: 15px/1.5 system-ui, sans-serif; background: var(--bg);
+        color: var(--text);
+      }
+      header {
+        padding: 16px 20px; border-bottom: 1px solid var(--border);
+        display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+      }
+      h1 { font-size: 18px; margin: 0; }
+      nav { display: flex; gap: 8px; }
+      nav button {
+        background: none; border: 1px solid var(--border); color: var(--muted);
+        padding: 6px 12px; border-radius: 8px; cursor: pointer;
+      }
+      nav button.active { color: var(--text); border-color: var(--accent); }
+      main { max-width: 900px; margin: 0 auto; padding: 20px; }
+      .card {
+        background: var(--panel); border: 1px solid var(--border);
+        border-radius: 12px; padding: 14px 16px; margin-bottom: 12px;
+      }
+      .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+      .grow { flex: 1; min-width: 200px; }
+      input, select {
+        background: #0d0f14; border: 1px solid var(--border); color: var(--text);
+        padding: 8px 10px; border-radius: 8px; font: inherit;
+      }
+      button.act {
+        background: var(--accent); border: none; color: #06122b; font-weight: 600;
+        padding: 8px 14px; border-radius: 8px; cursor: pointer;
+      }
+      button.ghost {
+        background: none; border: 1px solid var(--border); color: var(--text);
+        padding: 8px 12px; border-radius: 8px; cursor: pointer;
+      }
+      .title { font-weight: 600; }
+      .muted { color: var(--muted); font-size: 13px; }
+      a { color: var(--accent); text-decoration: none; }
+      .badge {
+        font-size: 12px; padding: 2px 8px; border-radius: 999px;
+        border: 1px solid var(--border); color: var(--muted);
+      }
+      .badge.ready { color: var(--good); border-color: var(--good); }
+      .badge.failed { color: var(--bad); border-color: var(--bad); }
+      .badge.working { color: var(--warn); border-color: var(--warn); }
+      .hide { display: none; }
+      label { font-size: 13px; color: var(--muted); }
+      code { background: #0d0f14; padding: 2px 6px; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Reading Queue → Podcast</h1>
+      <nav>
+        <button data-tab="queue" class="active">Queue</button>
+        <button data-tab="feeds">Subscriptions</button>
+        <button data-tab="episodes">Episodes</button>
+        <button data-tab="settings">Settings</button>
+      </nav>
+    </header>
+    <main>
+      <section id="queue">
+        <div class="card">
+          <div class="row">
+            <input class="grow" id="addUrl" placeholder="Paste an article URL…" />
+            <button class="act" id="addUrlBtn">Add to queue</button>
+          </div>
+          <div class="muted" style="margin-top:6px">
+            Adding fetches the article into your queue. Nothing is converted to
+            audio until you press <b>Convert</b>.
+          </div>
+        </div>
+        <div id="queueList"></div>
+      </section>
+
+      <section id="feeds" class="hide">
+        <div class="card">
+          <div class="row">
+            <input class="grow" id="feedUrl" placeholder="RSS feed URL…" />
+            <label><input type="checkbox" id="feedAuto" /> auto-convert</label>
+            <button class="act" id="addFeedBtn">Subscribe</button>
+          </div>
+        </div>
+        <div id="feedList"></div>
+      </section>
+
+      <section id="episodes" class="hide">
+        <div class="card">
+          <div class="title">Your private podcast feed</div>
+          <div class="row" style="margin-top:8px">
+            <input class="grow" id="feedLink" readonly />
+            <button class="ghost" id="copyFeed">Copy</button>
+          </div>
+          <div class="muted" style="margin-top:6px">
+            Add this URL in Apple Podcasts, Pocket Casts, Overcast, or AntennaPod.
+            (Spotify does not support private feeds.)
+          </div>
+        </div>
+        <div id="episodeList"></div>
+      </section>
+
+      <section id="settings" class="hide">
+        <div class="card">
+          <div class="title">Connection</div>
+          <div style="margin-top:8px">
+            <label>API base URL</label>
+            <input class="grow" id="apiBase" placeholder="https://xxxx.execute-api…amazonaws.com" style="width:100%" />
+          </div>
+          <div style="margin-top:8px">
+            <label>API key (APP_SECRET, if set)</label>
+            <input class="grow" id="apiKey" type="password" style="width:100%" />
+          </div>
+          <div class="row" style="margin-top:10px">
+            <button class="act" id="saveConn">Save</button>
+            <span class="muted" id="connMsg"></span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="title">Podcast settings</div>
+          <div class="row" style="margin-top:8px">
+            <label class="grow">Voice
+              <select id="voiceId" style="width:100%">
+                <option>Matthew</option><option>Joanna</option>
+                <option>Amy</option><option>Brian</option>
+                <option>Danielle</option><option>Stephen</option>
+              </select>
+            </label>
+            <label class="grow">Mode
+              <select id="mode" style="width:100%">
+                <option value="full-read">Full read</option>
+                <option value="summary">Summary</option>
+              </select>
+            </label>
+          </div>
+          <div style="margin-top:8px">
+            <label>Podcast title</label>
+            <input id="podTitle" style="width:100%" />
+          </div>
+          <div class="row" style="margin-top:10px">
+            <button class="act" id="saveConfig">Save</button>
+            <span class="muted" id="configMsg"></span>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>

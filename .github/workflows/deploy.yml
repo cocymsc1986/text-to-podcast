@@ -1,0 +1,49 @@
+name: Deploy
+
+# Auto-deploy to AWS on every push to main. Authenticates with GitHub OIDC by
+# assuming a scoped IAM role -- no long-lived AWS keys are stored in GitHub.
+on:
+  push:
+    branches:
+      - main
+
+# id-token: write is required for the OIDC token exchange.
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production # attach protection rules here to gate deploys if desired
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Quality gate before we touch AWS.
+      - run: npm run typecheck
+      - run: npm test
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Deploy CDK stack
+        run: npm run deploy:ci
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          APP_SECRET: ${{ secrets.APP_SECRET }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
+          DEFAULT_VOICE: ${{ vars.DEFAULT_VOICE }}
+          POLL_RATE_MINUTES: ${{ vars.POLL_RATE_MINUTES }}
