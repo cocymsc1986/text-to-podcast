@@ -18,15 +18,13 @@ import {
 } from "../lib/store.js";
 import { ingestFeed, ingestUrl, regenerateFeed, startConvert } from "../lib/pipeline.js";
 
-const CORS = {
-  "access-control-allow-origin": "*",
-  "access-control-allow-headers": "content-type,x-api-key",
-  "access-control-allow-methods": "GET,POST,PATCH,OPTIONS",
-};
-
+// CORS is owned entirely by API Gateway (see `corsPreflight` in infra/stack.ts):
+// it answers preflight OPTIONS and adds the Access-Control-* headers to every
+// response. The Lambda must NOT set them too — HTTP APIs don't dedupe, so a
+// second `Access-Control-Allow-Origin` produces `*, *` and the browser blocks it.
 const json = (statusCode: number, body: unknown): APIGatewayProxyResultV2 => ({
   statusCode,
-  headers: { "content-type": "application/json", ...CORS },
+  headers: { "content-type": "application/json" },
   body: JSON.stringify(body),
 });
 
@@ -34,7 +32,6 @@ export async function handler(
   event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyResultV2> {
   const method = event.requestContext.http.method;
-  if (method === "OPTIONS") return { statusCode: 204, headers: CORS };
 
   // Simple shared-secret auth so only the owner can spend Claude/Polly budget.
   const secret = process.env.APP_SECRET;
