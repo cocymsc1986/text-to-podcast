@@ -164,9 +164,11 @@ Two levers, both on by default:
 
 - **Voice engine.** `POLLY_ENGINE=generative` (the default) uses Polly's most
   lifelike engine — noticeably warmer and less robotic than the older `neural`
-  engine. `long-form` is another natural option tuned for longer content. If a
-  voice or region doesn't support your chosen engine, Polly errors on synthesis;
-  switch `POLLY_ENGINE` (or pick a supported voice) — see the
+  engine. `long-form` is another natural option tuned for longer content. Not
+  every voice supports every engine, so synthesis **falls back automatically**:
+  it tries your configured engine first, then steps down (generative →
+  long-form → neural → standard) to the best one the chosen voice supports — no
+  error, no manual matching. See the
   [Polly voice list](https://docs.aws.amazon.com/polly/latest/dg/voicelist.html).
   Generative/long-form cost a bit more per character than neural.
 - **Script style.** Claude is prompted to write a conversational, contraction-heavy
