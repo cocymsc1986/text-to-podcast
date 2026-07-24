@@ -6,6 +6,7 @@ import { fetchSourceFeed } from "./rssIn.js";
 import { makeScript } from "./script.js";
 import { startSynthesis } from "./tts.js";
 import { buildFeedXml } from "./rssOut.js";
+import { withRetry } from "./retry.js";
 import {
   audioKeyFor,
   createItemIfNew,
@@ -79,7 +80,11 @@ export async function ingestFeed(feed: Feed): Promise<Item[]> {
 /** Fetch + Readability. Updates and returns the item; never throws on bad pages. */
 export async function extractItem(item: Item): Promise<Item> {
   try {
-    const a = await extractFromUrl(item.sourceUrl);
+    // Retry transient fetch failures (timeouts, 5xx, network blips) before
+    // giving up and flagging the item as failed.
+    const a = await withRetry(() => extractFromUrl(item.sourceUrl), {
+      label: `extract ${item.sourceUrl}`,
+    });
     const updated: Item = {
       ...item,
       title: a.title || item.title,
@@ -94,6 +99,13 @@ export async function extractItem(item: Item): Promise<Item> {
   } catch (err: any) {
     return putItem({ ...item, queueStatus: "extract_failed", error: String(err?.message ?? err) });
   }
+}
+
+/** Re-run extraction for an item (e.g. one that previously failed). */
+export async function reextractItem(id: string): Promise<Item> {
+  const item = await getItem(id);
+  if (!item) throw new Error(`Item ${id} not found`);
+  return extractItem({ ...item, queueStatus: "new", error: undefined });
 }
 
 // --- Phase B: convert (spends Claude + Polly budget) --------------------------
@@ -111,15 +123,21 @@ export async function startConvert(id: string): Promise<Item> {
   await putItem({ ...item, convertState: "queued", error: undefined });
 
   try {
-    const script = await makeScript(
-      {
-        title: item.title,
-        text: item.articleText,
-        excerpt: item.excerpt,
-        byline: item.byline,
-        siteName: item.siteName,
-      },
-      config.mode,
+    // Both Claude and Polly are network calls that can blip transiently; retry
+    // each so a single hiccup doesn't strand the item in a failed state.
+    const script = await withRetry(
+      () =>
+        makeScript(
+          {
+            title: item.title,
+            text: item.articleText,
+            excerpt: item.excerpt,
+            byline: item.byline,
+            siteName: item.siteName,
+          },
+          config.mode,
+        ),
+      { label: `script ${item.id}` },
     );
 
     const episodeId = newId();
@@ -135,7 +153,9 @@ export async function startConvert(id: string): Promise<Item> {
     await putEpisode(episode);
     await putItem({ ...item, convertState: "scripted", episodeId });
 
-    await startSynthesis(episodeId, script.script, config.voiceId);
+    await withRetry(() => startSynthesis(episodeId, script.script, config.voiceId), {
+      label: `synthesize ${episodeId}`,
+    });
     return putItem({ ...item, convertState: "synthesizing", episodeId });
   } catch (err: any) {
     return putItem({ ...item, convertState: "failed", error: String(err?.message ?? err) });

@@ -16,7 +16,13 @@ import {
   putFeed,
   putItem,
 } from "../lib/store.js";
-import { ingestFeed, ingestUrl, regenerateFeed, startConvert } from "../lib/pipeline.js";
+import {
+  ingestFeed,
+  ingestUrl,
+  reextractItem,
+  regenerateFeed,
+  startConvert,
+} from "../lib/pipeline.js";
 
 // The Access-Control-* headers are owned entirely by API Gateway (see
 // `corsPreflight` in infra/stack.ts) — it adds them to every response. The
@@ -59,6 +65,9 @@ export async function handler(
       }
       if (parts.length === 3 && method === "POST" && parts[2] === "convert") {
         return json(202, { item: await startConvert(parts[1]) });
+      }
+      if (parts.length === 3 && method === "POST" && parts[2] === "reextract") {
+        return json(202, { item: await reextractItem(parts[1]) });
       }
       if (parts.length === 2 && method === "PATCH") {
         const item = await getItem(parts[1]);

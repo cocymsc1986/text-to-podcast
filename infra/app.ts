@@ -16,6 +16,7 @@ new TextToPodcastStack(app, "TextToPodcast", {
   appSecret: process.env.APP_SECRET ?? "",
   claudeModel: process.env.CLAUDE_MODEL || "claude-sonnet-5",
   defaultVoice: process.env.DEFAULT_VOICE || "Matthew",
+  pollyEngine: process.env.POLLY_ENGINE || "generative",
   pollRateMinutes: Number(process.env.POLL_RATE_MINUTES) || 15,
 });
 

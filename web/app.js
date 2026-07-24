@@ -24,11 +24,26 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => (s ?? "").replace(/[&<>"]/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
+// --- Auto-refresh polling ---
+// While anything is still fetching/converting/synthesizing, re-load the active
+// tab every few seconds so it reports "ready"/"failed" on its own — no manual
+// refresh needed. Only one timer runs at a time; switching tabs cancels it.
+const POLL_MS = 4000;
+let pollTimer = null;
+let activeTab = "queue";
+function clearPoll() { if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; } }
+function schedulePoll(tab, reload) {
+  clearPoll();
+  pollTimer = setTimeout(() => { if (activeTab === tab) reload(); }, POLL_MS);
+}
+
 // --- Tabs ---
 document.querySelectorAll("nav button").forEach((b) =>
   b.addEventListener("click", () => showTab(b.dataset.tab)));
 
 function showTab(tab) {
+  activeTab = tab;
+  clearPoll();
   document.querySelectorAll("nav button").forEach((b) =>
     b.classList.toggle("active", b.dataset.tab === tab));
   ["queue", "feeds", "episodes", "settings"].forEach((t) =>
@@ -43,26 +58,35 @@ function showTab(tab) {
 function convertBadge(item) {
   const s = item.convertState;
   if (s === "ready") return `<span class="badge ready">audio ready</span>`;
-  if (s === "failed") return `<span class="badge failed">failed</span>`;
+  if (s === "failed") return `<span class="badge failed">convert failed</span>`;
   if (["queued", "scripted", "synthesizing"].includes(s))
     return `<span class="badge working">converting…</span>`;
   if (item.queueStatus === "extract_failed")
     return `<span class="badge failed">extract failed</span>`;
   if (item.queueStatus === "extracted")
     return `<span class="badge">ready to read</span>`;
-  return `<span class="badge">fetching…</span>`;
+  return `<span class="badge working">fetching…</span>`;
+}
+
+/** True while an item is still doing work the UI should watch until it settles. */
+function itemPending(it) {
+  return it.queueStatus === "new" ||
+    ["queued", "scripted", "synthesizing"].includes(it.convertState);
 }
 
 async function loadQueue() {
   const list = $("queueList");
-  list.innerHTML = `<div class="muted">Loading…</div>`;
+  if (!list.dataset.loaded) list.innerHTML = `<div class="muted">Loading…</div>`;
   try {
     const { items } = await api("/items");
+    list.dataset.loaded = "1";
     if (!items.length) { list.innerHTML = `<div class="muted">Queue is empty.</div>`; return; }
     list.innerHTML = "";
     for (const it of items) {
       const canConvert = it.queueStatus === "extracted" &&
         ["none", "failed"].includes(it.convertState);
+      const convertLabel = it.convertState === "failed" ? "Retry conversion" : "Convert to audio";
+      const canReextract = it.queueStatus === "extract_failed";
       const el = document.createElement("div");
       el.className = "card";
       el.innerHTML = `
@@ -75,18 +99,31 @@ async function loadQueue() {
           ${convertBadge(it)}
         </div>
         <div class="row" style="margin-top:10px">
-          ${canConvert ? `<button class="act" data-convert="${it.id}">Convert to audio</button>` : ""}
+          ${canConvert ? `<button class="act" data-convert="${it.id}">${convertLabel}</button>` : ""}
+          ${canReextract ? `<button class="ghost" data-reextract="${it.id}">Retry</button>` : ""}
           ${it.error ? `<span class="muted">${esc(it.error)}</span>` : ""}
         </div>`;
       list.appendChild(el);
     }
     list.querySelectorAll("[data-convert]").forEach((b) =>
       b.addEventListener("click", async () => {
+        const label = b.textContent;
         b.disabled = true; b.textContent = "Starting…";
         try { await api(`/items/${b.dataset.convert}/convert`, "POST"); await loadQueue(); }
-        catch (e) { alert(e.message); b.disabled = false; b.textContent = "Convert to audio"; }
+        catch (e) { alert(e.message); b.disabled = false; b.textContent = label; }
       }));
-  } catch (e) { list.innerHTML = `<div class="muted">${esc(e.message)}</div>`; }
+    list.querySelectorAll("[data-reextract]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        b.disabled = true; b.textContent = "Retrying…";
+        try { await api(`/items/${b.dataset.reextract}/reextract`, "POST"); await loadQueue(); }
+        catch (e) { alert(e.message); b.disabled = false; b.textContent = "Retry"; }
+      }));
+
+    // Keep polling while anything is still fetching or converting.
+    if (items.some(itemPending)) schedulePoll("queue", loadQueue);
+  } catch (e) {
+    if (!list.dataset.loaded) list.innerHTML = `<div class="muted">${esc(e.message)}</div>`;
+  }
 }
 
 $("addUrlBtn").addEventListener("click", async () => {
@@ -149,22 +186,30 @@ async function loadEpisodes() {
     $("feedLink").value = cfg.feedUrl || "";
   } catch { /* ignore until connected */ }
   const list = $("episodeList");
-  list.innerHTML = `<div class="muted">Loading…</div>`;
+  if (!list.dataset.loaded) list.innerHTML = `<div class="muted">Loading…</div>`;
   try {
     const { episodes } = await api("/episodes");
+    list.dataset.loaded = "1";
     const ready = episodes.filter((e) => e.bytes);
-    if (!ready.length) { list.innerHTML = `<div class="muted">No episodes yet.</div>`; return; }
-    list.innerHTML = "";
-    for (const e of ready) {
-      const el = document.createElement("div");
-      el.className = "card";
-      el.innerHTML = `
-        <div class="title">${esc(e.title)}</div>
-        <div class="muted">${esc(e.showNotes)}</div>
-        <div style="margin-top:6px"><a href="${esc(e.sourceUrl)}" target="_blank">source</a></div>`;
-      list.appendChild(el);
+    if (!ready.length) {
+      list.innerHTML = `<div class="muted">No episodes yet.</div>`;
+    } else {
+      list.innerHTML = "";
+      for (const e of ready) {
+        const el = document.createElement("div");
+        el.className = "card";
+        el.innerHTML = `
+          <div class="title">${esc(e.title)}</div>
+          <div class="muted">${esc(e.showNotes)}</div>
+          <div style="margin-top:6px"><a href="${esc(e.sourceUrl)}" target="_blank">source</a></div>`;
+        list.appendChild(el);
+      }
     }
-  } catch (e) { list.innerHTML = `<div class="muted">${esc(e.message)}</div>`; }
+    // Keep polling while any episode is still being synthesized.
+    if (episodes.some((e) => !e.bytes)) schedulePoll("episodes", loadEpisodes);
+  } catch (e) {
+    if (!list.dataset.loaded) list.innerHTML = `<div class="muted">${esc(e.message)}</div>`;
+  }
 }
 
 $("copyFeed").addEventListener("click", () => {
