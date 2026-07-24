@@ -18,6 +18,7 @@ new TextToPodcastStack(app, "TextToPodcast", {
   defaultVoice: process.env.DEFAULT_VOICE || "Matthew",
   pollyEngine: process.env.POLLY_ENGINE || "generative",
   pollRateMinutes: Number(process.env.POLL_RATE_MINUTES) || 15,
+  maxItemsPerPoll: Number(process.env.MAX_ITEMS_PER_POLL) || 10,
 });
 
 function requireEnv(name: string): string {

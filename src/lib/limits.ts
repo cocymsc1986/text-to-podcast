@@ -25,3 +25,12 @@ export const MAX_REDIRECTS = 5;
 
 /** Reject absurdly long input URLs before we even try to fetch them. */
 export const MAX_URL_LENGTH = 2_048;
+
+/**
+ * Max NEW items ingested from a single feed per poll. Without this, subscribing
+ * to a busy feed dumps its entire current window (often dozens of entries) into
+ * the reading queue at once — each one a page fetch + extraction. We take only
+ * the newest N per poll: the backlog is intentionally skipped and genuinely new
+ * entries flow in over subsequent polls. Configurable via MAX_ITEMS_PER_POLL.
+ */
+export const MAX_ITEMS_PER_POLL = Math.max(1, Number(process.env.MAX_ITEMS_PER_POLL) || 10);
