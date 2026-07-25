@@ -208,7 +208,14 @@ async function loadFeeds() {
   const list = $("feedList");
   list.innerHTML = `<div class="muted">Loading…</div>`;
   try {
-    const { feeds } = await api("/feeds");
+    // Fetch config alongside feeds so the limit inputs can show the real
+    // global default (blank means "this many").
+    const [{ feeds }, cfg] = await Promise.all([
+      api("/feeds"),
+      api("/config").catch(() => null),
+    ]);
+    const limitPlaceholder = cfg && cfg.maxItemsPerPoll ? `default (${cfg.maxItemsPerPoll})` : "default";
+    $("feedLimit").placeholder = limitPlaceholder;
     if (!feeds.length) { list.innerHTML = `<div class="muted">No subscriptions yet.</div>`; return; }
     list.innerHTML = "";
     for (const f of feeds) {
@@ -221,8 +228,8 @@ async function loadFeeds() {
             <div class="muted">${esc(f.sourceUrl)}</div>
           </div>
           <label>limit <input data-limit="${f.id}" value="${esc(limitValue(f))}"
-            placeholder="default" title="Newest items per poll — number, 'all', or blank for default"
-            style="width:70px" /></label>
+            placeholder="${esc(limitPlaceholder)}" title="Newest items per poll — number, 'all', or blank for default"
+            style="width:96px" /></label>
           <label><input type="checkbox" data-auto="${f.id}" ${f.autoConvert ? "checked" : ""}/> auto-convert</label>
           <button class="ghost" data-poll="${f.id}">Poll now</button>
         </div>`;
@@ -326,5 +333,17 @@ $("saveConfig").addEventListener("click", async () => {
     setTimeout(() => ($("configMsg").textContent = ""), 1500);
   } catch (e) { alert(e.message); }
 });
+
+// --- Theme ---
+// The <head> script already applied the saved theme (default light) before
+// paint; here we keep the toggle button's label in sync and flip on click.
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem("theme", t); } catch (e) { /* ignore */ }
+  $("themeToggle").textContent = t === "dark" ? "☀ Light" : "🌙 Dark";
+}
+$("themeToggle").addEventListener("click", () =>
+  applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
+applyTheme(document.documentElement.dataset.theme || "light");
 
 showTab("queue");

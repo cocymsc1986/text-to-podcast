@@ -154,7 +154,10 @@ export async function handler(
     if (parts[0] === "config") {
       const config = await ensureConfig();
       if (method === "GET") {
-        return json(200, { config, feedUrl: feedUrlFor(config.feedToken) });
+        // Surface the global default so the UI can label the per-feed limit
+        // input with the actual number (blank = this many).
+        const maxItemsPerPoll = Number(process.env.MAX_ITEMS_PER_POLL) || 10;
+        return json(200, { config, feedUrl: feedUrlFor(config.feedToken), maxItemsPerPoll });
       }
       if (method === "POST") {
         const current = (await getConfig())!;
