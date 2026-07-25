@@ -52,9 +52,14 @@ export async function ingestUrl(url: string): Promise<Item> {
 /** Poll one source feed, queue any new items, and (optionally) auto-convert. */
 export async function ingestFeed(feed: Feed): Promise<Item[]> {
   const source = await fetchSourceFeed(feed.sourceUrl);
-  // Only ingest the newest MAX_ITEMS_PER_POLL entries so a subscribe never
-  // floods the queue with a busy feed's whole backlog.
-  const newest = selectNewest(source.items, MAX_ITEMS_PER_POLL);
+  // Only ingest the newest N entries so a subscribe never floods the queue with
+  // a busy feed's whole backlog. Per-feed `ingestLimit` overrides the global
+  // default; 0 means "no cap" (ingest all items).
+  const limit =
+    feed.ingestLimit === undefined ? MAX_ITEMS_PER_POLL
+    : feed.ingestLimit === 0 ? Infinity
+    : feed.ingestLimit;
+  const newest = selectNewest(source.items, limit);
   const results: Item[] = [];
   for (const si of newest) {
     const id = itemId(feed.id, si.guid);

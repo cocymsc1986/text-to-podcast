@@ -97,8 +97,15 @@
         <div class="card">
           <div class="row">
             <input class="grow" id="feedUrl" placeholder="RSS feed URL…" />
+            <input id="feedLimit" placeholder="Limit"
+              title="Newest items ingested per poll. Blank = default. A number, or 'all' for no cap."
+              style="width:80px" />
             <label><input type="checkbox" id="feedAuto" /> auto-convert</label>
             <button class="act" id="addFeedBtn">Subscribe</button>
+          </div>
+          <div class="muted" style="margin-top:6px">
+            <b>Limit</b>: how many of the newest items to pull in per poll — leave blank for
+            the default, set a number, or <code>all</code> to backfill the whole feed.
           </div>
         </div>
         <div id="feedList"></div>

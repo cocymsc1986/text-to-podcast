@@ -14,6 +14,12 @@ export interface Feed {
    * queue and wait for the user to press "Convert".
    */
   autoConvert: boolean;
+  /**
+   * Max newest items ingested from this feed per poll, overriding the global
+   * MAX_ITEMS_PER_POLL. `undefined` uses that default; `0` means no cap at all
+   * (ingest every item — e.g. to backfill a whole feed on subscribe).
+   */
+  ingestLimit?: number;
   lastPolledAt?: string;
   createdAt: string;
 }

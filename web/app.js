@@ -199,6 +199,11 @@ $("addUrlBtn").addEventListener("click", async () => {
 });
 
 // --- Feeds ---
+// Display value for a feed's per-poll ingest limit: blank = global default,
+// "all" = no cap, otherwise the number.
+const limitValue = (f) =>
+  f.ingestLimit === undefined ? "" : f.ingestLimit === 0 ? "all" : String(f.ingestLimit);
+
 async function loadFeeds() {
   const list = $("feedList");
   list.innerHTML = `<div class="muted">Loading…</div>`;
@@ -215,6 +220,9 @@ async function loadFeeds() {
             <div class="title">${esc(f.title)}</div>
             <div class="muted">${esc(f.sourceUrl)}</div>
           </div>
+          <label>limit <input data-limit="${f.id}" value="${esc(limitValue(f))}"
+            placeholder="default" title="Newest items per poll — number, 'all', or blank for default"
+            style="width:70px" /></label>
           <label><input type="checkbox" data-auto="${f.id}" ${f.autoConvert ? "checked" : ""}/> auto-convert</label>
           <button class="ghost" data-poll="${f.id}">Poll now</button>
         </div>`;
@@ -223,6 +231,11 @@ async function loadFeeds() {
     list.querySelectorAll("[data-auto]").forEach((c) =>
       c.addEventListener("change", () =>
         api(`/feeds/${c.dataset.auto}`, "PATCH", { autoConvert: c.checked }).catch((e) => alert(e.message))));
+    list.querySelectorAll("[data-limit]").forEach((i) =>
+      i.addEventListener("change", async () => {
+        try { await api(`/feeds/${i.dataset.limit}`, "PATCH", { ingestLimit: i.value.trim() }); await loadFeeds(); }
+        catch (e) { alert(e.message); }
+      }));
     list.querySelectorAll("[data-poll]").forEach((b) =>
       b.addEventListener("click", async () => {
         b.disabled = true; b.textContent = "Polling…";
@@ -237,8 +250,13 @@ $("addFeedBtn").addEventListener("click", async () => {
   const sourceUrl = $("feedUrl").value.trim();
   if (!sourceUrl) return;
   try {
-    await api("/feeds", "POST", { sourceUrl, autoConvert: $("feedAuto").checked });
-    $("feedUrl").value = ""; $("feedAuto").checked = false; await loadFeeds();
+    await api("/feeds", "POST", {
+      sourceUrl,
+      autoConvert: $("feedAuto").checked,
+      ingestLimit: $("feedLimit").value.trim(), // blank = default; number or "all"
+    });
+    $("feedUrl").value = ""; $("feedLimit").value = ""; $("feedAuto").checked = false;
+    await loadFeeds();
   } catch (e) { alert(e.message); }
 });
 

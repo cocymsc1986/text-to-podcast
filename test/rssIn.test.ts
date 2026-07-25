@@ -45,4 +45,9 @@ describe("rssIn.selectNewest", () => {
     const items = [mk("undated"), mk("dated", "2026-01-01")];
     expect(selectNewest(items, 1).map((i) => i.guid)).toEqual(["dated"]);
   });
+
+  it("returns all items when the limit is Infinity (the 'no cap' case)", () => {
+    const items = [mk("a", "2026-01-01"), mk("b", "2026-02-01"), mk("c", "2026-03-01")];
+    expect(selectNewest(items, Infinity)).toHaveLength(3);
+  });
 });

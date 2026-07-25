@@ -127,7 +127,9 @@ protection rule there if you want a manual approval before each deploy.
 3. **Subscriptions** tab: add an RSS feed. New items flow into the queue automatically
    (every `POLL_RATE_MINUTES`); tick **auto-convert** to also make episodes automatically.
    Each poll ingests only the **newest `MAX_ITEMS_PER_POLL` items** per feed (default 10),
-   so subscribing to a busy feed doesn't flood the queue with its whole backlog. Back in
+   so subscribing to a busy feed doesn't flood the queue with its whole backlog. Override
+   this per feed with the **Limit** field (a number, or `all` to backfill everything; blank
+   uses the default) — settable when subscribing and editable later in the list. Back in
    the **Queue** tab, each article is tagged with the source it came from — use the
    **Source** dropdown to filter to one feed, and **Archive** to prune ones you don't want.
 4. **Episodes** tab: copy your **private feed URL** and add it to Apple Podcasts /
