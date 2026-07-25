@@ -2,8 +2,8 @@
 // (A) ingest -> reading queue (always, no audio), (B) convert -> audio (on demand).
 import type { Episode, Feed, Item } from "./types.js";
 import { extractFromUrl } from "./extract.js";
-import { MAX_ARTICLE_CHARS } from "./limits.js";
-import { fetchSourceFeed } from "./rssIn.js";
+import { MAX_ARTICLE_CHARS, MAX_ITEMS_PER_POLL } from "./limits.js";
+import { fetchSourceFeed, selectNewest } from "./rssIn.js";
 import { makeScript } from "./script.js";
 import { startSynthesis } from "./tts.js";
 import { buildFeedXml } from "./rssOut.js";
@@ -52,8 +52,16 @@ export async function ingestUrl(url: string): Promise<Item> {
 /** Poll one source feed, queue any new items, and (optionally) auto-convert. */
 export async function ingestFeed(feed: Feed): Promise<Item[]> {
   const source = await fetchSourceFeed(feed.sourceUrl);
+  // Only ingest the newest N entries so a subscribe never floods the queue with
+  // a busy feed's whole backlog. Per-feed `ingestLimit` overrides the global
+  // default; 0 means "no cap" (ingest all items).
+  const limit =
+    feed.ingestLimit === undefined ? MAX_ITEMS_PER_POLL
+    : feed.ingestLimit === 0 ? Infinity
+    : feed.ingestLimit;
+  const newest = selectNewest(source.items, limit);
   const results: Item[] = [];
-  for (const si of source.items) {
+  for (const si of newest) {
     const id = itemId(feed.id, si.guid);
     const { item, created } = await createItemIfNew({
       id,

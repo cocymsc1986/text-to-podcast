@@ -47,6 +47,19 @@ function isHttpUrl(value: unknown): value is string {
   }
 }
 
+// Parse an optional per-feed ingest limit from request input. Accepts a
+// non-negative integer, or "all"/0 for no cap; blank/absent leaves it unset
+// (use the global default). Returns { error } for anything else.
+function parseIngestLimit(v: unknown): { value?: number } | { error: string } {
+  if (v === undefined || v === null || v === "") return { value: undefined };
+  const s = typeof v === "string" ? v.trim().toLowerCase() : v;
+  const n = s === "all" ? 0 : Number(s);
+  if (!Number.isInteger(n) || n < 0 || n > 1000) {
+    return { error: "ingestLimit must be a whole number 0–1000 (0 or 'all' = no cap)" };
+  }
+  return { value: n };
+}
+
 export async function handler(
   event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyResultV2> {
@@ -99,6 +112,8 @@ export async function handler(
         if (!isHttpUrl(body.sourceUrl)) {
           return json(400, { error: "sourceUrl must be a valid http(s) URL" });
         }
+        const limit = parseIngestLimit(body.ingestLimit);
+        if ("error" in limit) return json(400, { error: limit.error });
         const feed: Feed = {
           id: newId(),
           type: "rss",
@@ -106,6 +121,7 @@ export async function handler(
           title: String(body.title ?? body.sourceUrl),
           active: true,
           autoConvert: Boolean(body.autoConvert),
+          ingestLimit: limit.value,
           createdAt: new Date().toISOString(),
         };
         return json(201, { feed: await putFeed(feed) });
@@ -115,6 +131,11 @@ export async function handler(
         if (!feed) return json(404, { error: "not found" });
         if (typeof body.autoConvert === "boolean") feed.autoConvert = body.autoConvert;
         if (typeof body.active === "boolean") feed.active = body.active;
+        if ("ingestLimit" in body) {
+          const limit = parseIngestLimit(body.ingestLimit);
+          if ("error" in limit) return json(400, { error: limit.error });
+          feed.ingestLimit = limit.value; // undefined resets to the global default
+        }
         return json(200, { feed: await putFeed(feed) });
       }
       if (parts.length === 3 && method === "POST" && parts[2] === "poll") {
@@ -133,7 +154,10 @@ export async function handler(
     if (parts[0] === "config") {
       const config = await ensureConfig();
       if (method === "GET") {
-        return json(200, { config, feedUrl: feedUrlFor(config.feedToken) });
+        // Surface the global default so the UI can label the per-feed limit
+        // input with the actual number (blank = this many).
+        const maxItemsPerPoll = Number(process.env.MAX_ITEMS_PER_POLL) || 10;
+        return json(200, { config, feedUrl: feedUrlFor(config.feedToken), maxItemsPerPoll });
       }
       if (method === "POST") {
         const current = (await getConfig())!;

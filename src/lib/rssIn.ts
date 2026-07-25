@@ -50,3 +50,14 @@ export function normalize(
     .filter((x): x is SourceItem => x !== null);
   return { title: (feed.title || fallbackTitle).toString().trim(), items };
 }
+
+/**
+ * Newest-first, capped to `limit`. Bounds how many entries a single poll
+ * ingests so subscribing to a busy feed can't dump its whole backlog into the
+ * queue at once. Undated items sort last (treated as oldest).
+ */
+export function selectNewest(items: SourceItem[], limit: number): SourceItem[] {
+  return [...items]
+    .sort((a, b) => (b.isoDate ?? "").localeCompare(a.isoDate ?? ""))
+    .slice(0, Math.max(0, limit));
+}

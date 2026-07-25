@@ -78,6 +78,7 @@ export CLAUDE_MODEL=claude-sonnet-5        # or claude-haiku-4-5-20251001 (cheap
 export DEFAULT_VOICE=Matthew               # any Polly voice for the chosen engine
 export POLLY_ENGINE=generative             # generative | long-form | neural (see below)
 export POLL_RATE_MINUTES=15
+export MAX_ITEMS_PER_POLL=10                # newest items ingested per feed, per poll
 
 npm run deploy   # bundles the Lambdas, then cdk deploy
 ```
@@ -112,7 +113,7 @@ Two workflows are included:
 
 - **Secrets:** `AWS_DEPLOY_ROLE_ARN`, `ANTHROPIC_API_KEY`, `APP_SECRET`.
 - **Variables:** `AWS_REGION` (required), plus optional `CLAUDE_MODEL`, `DEFAULT_VOICE`,
-  `POLLY_ENGINE`, `POLL_RATE_MINUTES`.
+  `POLLY_ENGINE`, `POLL_RATE_MINUTES`, `MAX_ITEMS_PER_POLL`.
 
 The deploy job runs in a `production` GitHub Environment, so you can add a required-reviewer
 protection rule there if you want a manual approval before each deploy.
@@ -125,6 +126,12 @@ protection rule there if you want a manual approval before each deploy.
    Press **Convert to audio** when you want an episode.
 3. **Subscriptions** tab: add an RSS feed. New items flow into the queue automatically
    (every `POLL_RATE_MINUTES`); tick **auto-convert** to also make episodes automatically.
+   Each poll ingests only the **newest `MAX_ITEMS_PER_POLL` items** per feed (default 10),
+   so subscribing to a busy feed doesn't flood the queue with its whole backlog. Override
+   this per feed with the **Limit** field (a number, or `all` to backfill everything; blank
+   uses the default) — settable when subscribing and editable later in the list. Back in
+   the **Queue** tab, each article is tagged with the source it came from — use the
+   **Source** dropdown to filter to one feed, and **Archive** to prune ones you don't want.
 4. **Episodes** tab: copy your **private feed URL** and add it to Apple Podcasts /
    Pocket Casts / Overcast / AntennaPod.
 

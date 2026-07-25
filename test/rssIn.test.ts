@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalize } from "../src/lib/rssIn.js";
+import { normalize, selectNewest } from "../src/lib/rssIn.js";
 
 describe("rssIn.normalize", () => {
   it("maps items and prefers guid for dedupe", () => {
@@ -20,5 +20,34 @@ describe("rssIn.normalize", () => {
   it("drops items without a usable link/guid", () => {
     const out = normalize({ items: [{ title: "no link" }] }, "fb");
     expect(out.items).toHaveLength(0);
+  });
+});
+
+describe("rssIn.selectNewest", () => {
+  const mk = (guid: string, isoDate?: string) => ({ guid, title: guid, link: `https://ex.com/${guid}`, isoDate });
+
+  it("caps to the newest N and drops the older backlog", () => {
+    const items = [
+      mk("old", "2026-01-01"),
+      mk("mid", "2026-02-01"),
+      mk("new", "2026-03-01"),
+    ];
+    const out = selectNewest(items, 2);
+    expect(out.map((i) => i.guid)).toEqual(["new", "mid"]);
+  });
+
+  it("returns everything when under the limit", () => {
+    const items = [mk("a", "2026-01-01"), mk("b", "2026-02-01")];
+    expect(selectNewest(items, 10)).toHaveLength(2);
+  });
+
+  it("sinks undated items below dated ones", () => {
+    const items = [mk("undated"), mk("dated", "2026-01-01")];
+    expect(selectNewest(items, 1).map((i) => i.guid)).toEqual(["dated"]);
+  });
+
+  it("returns all items when the limit is Infinity (the 'no cap' case)", () => {
+    const items = [mk("a", "2026-01-01"), mk("b", "2026-02-01"), mk("c", "2026-03-01")];
+    expect(selectNewest(items, Infinity)).toHaveLength(3);
   });
 });
