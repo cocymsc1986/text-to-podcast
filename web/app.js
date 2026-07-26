@@ -1,7 +1,15 @@
 // Tiny vanilla SPA for the reading queue -> podcast platform.
+
+// The API base URL is injected at deploy time via config.js (from the
+// API_BASE_URL env var, or the stack's own endpoint). When present it's the
+// source of truth, so the URL never has to be entered by hand. A saved value
+// in Settings is only a fallback for local development where config.js is empty.
+const injectedBase = ((window.APP_CONFIG && window.APP_CONFIG.apiBaseUrl) || "").trim();
+
 const store = {
-  get base() { return localStorage.getItem("apiBase") || ""; },
+  get base() { return injectedBase || localStorage.getItem("apiBase") || ""; },
   set base(v) { localStorage.setItem("apiBase", v); },
+  get baseFromConfig() { return injectedBase !== ""; },
   get key() { return localStorage.getItem("apiKey") || ""; },
   set key(v) { localStorage.setItem("apiKey", v); },
 };
@@ -309,6 +317,11 @@ $("copyFeed").addEventListener("click", () => {
 // --- Settings ---
 function loadSettings() {
   $("apiBase").value = store.base;
+  // When the URL is injected by the deployment, it's read-only here.
+  if (store.baseFromConfig) {
+    $("apiBase").disabled = true;
+    $("apiBaseNote").classList.remove("hide");
+  }
   $("apiKey").value = store.key;
   api("/config").then((c) => {
     $("voiceId").value = c.config.voiceId;
@@ -318,7 +331,9 @@ function loadSettings() {
 }
 
 $("saveConn").addEventListener("click", () => {
-  store.base = $("apiBase").value.trim();
+  // The base URL comes from the deployment when injected; only persist a
+  // manually entered one (local dev).
+  if (!store.baseFromConfig) store.base = $("apiBase").value.trim();
   store.key = $("apiKey").value.trim();
   $("connMsg").textContent = "Saved.";
   setTimeout(() => ($("connMsg").textContent = ""), 1500);

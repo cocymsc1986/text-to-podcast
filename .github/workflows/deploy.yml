@@ -55,3 +55,4 @@ jobs:
           DEFAULT_VOICE: ${{ vars.DEFAULT_VOICE }}
           POLL_RATE_MINUTES: ${{ vars.POLL_RATE_MINUTES }}
           MAX_ITEMS_PER_POLL: ${{ vars.MAX_ITEMS_PER_POLL }}
+          API_BASE_URL: ${{ vars.API_BASE_URL }}

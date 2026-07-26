@@ -19,6 +19,8 @@ new TextToPodcastStack(app, "TextToPodcast", {
   pollyEngine: process.env.POLLY_ENGINE || "generative",
   pollRateMinutes: Number(process.env.POLL_RATE_MINUTES) || 15,
   maxItemsPerPoll: Number(process.env.MAX_ITEMS_PER_POLL) || 10,
+  // Blank falls back to the stack's own API endpoint; set for a custom domain.
+  apiBaseUrl: process.env.API_BASE_URL || "",
 });
 
 function requireEnv(name: string): string {
