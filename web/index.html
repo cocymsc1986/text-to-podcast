@@ -146,6 +146,9 @@
           <div style="margin-top:8px">
             <label>API base URL</label>
             <input class="grow" id="apiBase" placeholder="https://xxxx.execute-api…amazonaws.com" style="width:100%" />
+            <div class="muted hide" id="apiBaseNote" style="margin-top:4px">
+              Set automatically by the deployment — no need to enter it here.
+            </div>
           </div>
           <div style="margin-top:8px">
             <label>API key (APP_SECRET, if set)</label>
@@ -184,6 +187,7 @@
         </div>
       </section>
     </main>
+    <script src="config.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

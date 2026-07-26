@@ -79,6 +79,7 @@ export DEFAULT_VOICE=Matthew               # any Polly voice for the chosen engi
 export POLLY_ENGINE=generative             # generative | long-form | neural (see below)
 export POLL_RATE_MINUTES=15
 export MAX_ITEMS_PER_POLL=10                # newest items ingested per feed, per poll
+export API_BASE_URL=                        # optional; blank = this stack's own API endpoint
 
 npm run deploy   # bundles the Lambdas, then cdk deploy
 ```
@@ -88,6 +89,11 @@ The stack outputs:
 - **ApiUrl** — the HTTP API base URL.
 - **WebAppUrl** — the hosted UI (`…/app/index.html`).
 - **MediaBaseUrl** — base URL for audio + the feed.
+
+The deploy bakes the API base URL into the UI (a generated `config.js`), so the
+hosted app is preconfigured — there's nothing to paste into **Settings**. By
+default it uses this stack's own **ApiUrl**; set `API_BASE_URL` only to point the
+UI at a custom domain.
 
 ## Deploy via GitHub Actions (CI + auto-deploy on `main`)
 
@@ -113,15 +119,15 @@ Two workflows are included:
 
 - **Secrets:** `AWS_DEPLOY_ROLE_ARN`, `ANTHROPIC_API_KEY`, `APP_SECRET`.
 - **Variables:** `AWS_REGION` (required), plus optional `CLAUDE_MODEL`, `DEFAULT_VOICE`,
-  `POLLY_ENGINE`, `POLL_RATE_MINUTES`, `MAX_ITEMS_PER_POLL`.
+  `POLLY_ENGINE`, `POLL_RATE_MINUTES`, `MAX_ITEMS_PER_POLL`, `API_BASE_URL`.
 
 The deploy job runs in a `production` GitHub Environment, so you can add a required-reviewer
 protection rule there if you want a manual approval before each deploy.
 
 ## Use it
 
-1. Open **WebAppUrl**, go to **Settings**, paste the **ApiUrl** and your **APP_SECRET**,
-   and Save.
+1. Open **WebAppUrl**. The **ApiUrl** is already configured; if you set an
+   **APP_SECRET**, go to **Settings**, enter it as the API key, and Save.
 2. **Queue** tab: paste an article URL → it's fetched and shows as *ready to read*.
    Press **Convert to audio** when you want an episode.
 3. **Subscriptions** tab: add an RSS feed. New items flow into the queue automatically

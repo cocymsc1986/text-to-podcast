@@ -29,6 +29,9 @@ export interface TextToPodcastStackProps extends StackProps {
   pollyEngine: string;
   pollRateMinutes: number;
   maxItemsPerPoll: number;
+  // Base URL the web UI calls. Blank falls back to this stack's own API
+  // endpoint, so it works with no configuration; override for a custom domain.
+  apiBaseUrl: string;
 }
 
 export class TextToPodcastStack extends Stack {
@@ -140,8 +143,19 @@ export class TextToPodcastStack extends Stack {
     );
 
     // --- Static web UI into app/ ----------------------------------------------
+    // The UI reads its API base URL from config.js at runtime instead of a
+    // hand-entered Settings field. Overwrite that file at deploy time with the
+    // configured URL (or this stack's own API endpoint when unset), so the UI
+    // is preconfigured. Source.data resolves the endpoint token at deploy time.
+    const webApiBaseUrl = props.apiBaseUrl || httpApi.apiEndpoint;
     new s3deploy.BucketDeployment(this, "WebDeploy", {
-      sources: [s3deploy.Source.asset(join(ROOT, "web"))],
+      sources: [
+        s3deploy.Source.asset(join(ROOT, "web")),
+        s3deploy.Source.data(
+          "config.js",
+          `window.APP_CONFIG = { apiBaseUrl: "${webApiBaseUrl}" };\n`,
+        ),
+      ],
       destinationBucket: media,
       destinationKeyPrefix: "app",
       prune: false,
