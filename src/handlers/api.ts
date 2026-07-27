@@ -84,7 +84,13 @@ export async function handler(
   try {
     // --- Reading queue ---
     if (parts[0] === "items") {
-      if (parts.length === 1 && method === "GET") return json(200, { items: await listItems() });
+      if (parts.length === 1 && method === "GET") {
+        // The queue UI polls this list every few seconds and never uses the full
+        // article body — drop `articleText` so each poll transfers a small
+        // metadata payload instead of the entire contents of every article.
+        const items = (await listItems()).map(({ articleText, ...rest }) => rest);
+        return json(200, { items });
+      }
       if (parts.length === 1 && method === "POST") {
         if (!body.url) return json(400, { error: "url required" });
         if (!isHttpUrl(body.url)) return json(400, { error: "url must be a valid http(s) URL" });

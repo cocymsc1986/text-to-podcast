@@ -42,6 +42,7 @@ spend Claude/Polly budget on things you actually want as audio. Any feed can be 
 | Concern | Service |
 |---|---|
 | API + web UI backend | AWS Lambda + API Gateway (HTTP API) |
+| Background extract/convert | worker Lambda (async invoke) — keeps the slow page-fetch, Claude, and Polly steps off the request path |
 | Scheduled feed polling | EventBridge rule → poller Lambda |
 | Audio, feed XML, web UI | Amazon S3 (public-read; content lives under unguessable paths) |
 | Metadata | DynamoDB (single table + `byType` GSI) |
@@ -53,7 +54,7 @@ spend Claude/Polly budget on things you actually want as audio. Any feed can be 
 ### Code layout
 
 ```
-src/handlers/   api.ts · poller.ts · synthCallback.ts   (Lambda entrypoints)
+src/handlers/   api.ts · poller.ts · worker.ts · synthCallback.ts   (Lambda entrypoints)
 src/lib/        extract · script · tts · rssIn · rssOut · store · pipeline · types
 infra/          CDK app + stack
 web/            static single-page UI (index.html + app.js)
@@ -190,12 +191,22 @@ Two levers, both on by default:
 
 ## Reliability
 
-- **Auto-refresh.** The queue and episodes tabs poll while anything is fetching,
-  converting, or synthesizing, so items flip to *ready* / *failed* on their own —
-  no manual refresh.
+- **Async pipeline.** Extraction and conversion run on a background **worker
+  Lambda**, not inside the API request. The API just enqueues the job and returns
+  immediately, so a slow page or a slow Claude call can't time the request out
+  (the sporadic **503s** that used to appear), and queuing several conversions
+  starts them all in parallel instead of the first one blocking the rest.
+- **Auto-refresh.** The queue and episodes tabs poll *only while* something is
+  fetching, converting, or synthesizing **and** the tab is visible, so an idle or
+  backgrounded tab doesn't keep hitting the API. The list payload omits article
+  bodies, so each poll is small. Items flip to *ready* / *failed* on their own.
 - **Retries.** The network-bound steps (page fetch, Claude, Polly) retry transient
-  failures with exponential backoff. If a step still fails, the queue shows a
-  **Retry** button (re-extract) or **Retry conversion** so you can re-run it.
+  failures with exponential backoff, and the web UI itself retries transient API
+  errors before surfacing anything — you only see an error *after* retries are
+  exhausted. If a step still fails, the queue shows a **Retry** button
+  (re-extract) or **Retry conversion**. A conversion that gets stranded (a worker
+  that died, or a lost finalize event) is detected as stalled and becomes
+  retryable rather than showing *converting…* forever.
 
 ## Abuse guards
 

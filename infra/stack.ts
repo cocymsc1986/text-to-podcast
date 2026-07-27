@@ -101,18 +101,27 @@ export class TextToPodcastStack extends Stack {
     const apiFn = fn("ApiFn", "api", 60);
     const pollerFn = fn("PollerFn", "poller", 120);
     const synthFn = fn("SynthCallbackFn", "synthCallback", 60);
+    // The worker runs the slow pipeline steps (page fetch, Claude, Polly) off
+    // the API request path, so it gets a generous timeout — a long article's
+    // scripting must never be cut short the way a 60s API request could be.
+    const workerFn = fn("WorkerFn", "worker", 300);
 
-    for (const f of [apiFn, pollerFn, synthFn]) {
+    for (const f of [apiFn, pollerFn, synthFn, workerFn]) {
       table.grantReadWriteData(f);
       media.grantReadWrite(f);
     }
-    // Only the ingest/convert paths call Polly.
+    // Only the worker synthesizes audio now (the API/poller just enqueue work).
     const pollyPolicy = new iam.PolicyStatement({
       actions: ["polly:StartSpeechSynthesisTask", "polly:GetSpeechSynthesisTask"],
       resources: ["*"],
     });
-    apiFn.addToRolePolicy(pollyPolicy);
-    pollerFn.addToRolePolicy(pollyPolicy);
+    workerFn.addToRolePolicy(pollyPolicy);
+
+    // The API and poller hand background jobs to the worker via async invoke.
+    workerFn.grantInvoke(apiFn);
+    workerFn.grantInvoke(pollerFn);
+    apiFn.addEnvironment("WORKER_FUNCTION_NAME", workerFn.functionName);
+    pollerFn.addEnvironment("WORKER_FUNCTION_NAME", workerFn.functionName);
 
     // --- HTTP API -------------------------------------------------------------
     const httpApi = new HttpApi(this, "HttpApi", {

@@ -17,6 +17,7 @@ const handlers = [
   { name: "api", entry: "src/handlers/api.ts" },
   { name: "poller", entry: "src/handlers/poller.ts" },
   { name: "synthCallback", entry: "src/handlers/synthCallback.ts" },
+  { name: "worker", entry: "src/handlers/worker.ts" },
 ];
 
 rmSync("dist", { recursive: true, force: true });
