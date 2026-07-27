@@ -14,18 +14,45 @@ const store = {
   set key(v) { localStorage.setItem("apiKey", v); },
 };
 
+// Transient failures worth retrying transparently before bothering the user:
+// gateway/throttle statuses plus any network-level fetch rejection. A cold Lambda
+// or a brief upstream blip often surfaces as a 503 that a retry clears — so we
+// retry with backoff and only surface an error AFTER exhausting the attempts,
+// instead of throwing an obtrusive alert on the first blip.
+const RETRY_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
+const API_ATTEMPTS = 4;
+const API_RETRY_BASE_MS = 600;
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
 async function api(path, method = "GET", body) {
   if (!store.base) throw new Error("Set the API base URL in Settings first.");
-  const res = await fetch(store.base.replace(/\/$/, "") + path, {
+  const url = store.base.replace(/\/$/, "") + path;
+  const init = {
     method,
     headers: {
       "content-type": "application/json",
       ...(store.key ? { "x-api-key": store.key } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) throw new Error(`${res.status}: ${(await res.text()).slice(0, 200)}`);
-  return res.status === 204 ? null : res.json();
+  };
+  let lastErr;
+  for (let attempt = 1; attempt <= API_ATTEMPTS; attempt++) {
+    let transient = false;
+    try {
+      const res = await fetch(url, init);
+      if (res.ok) return res.status === 204 ? null : res.json();
+      lastErr = new Error(`${res.status}: ${(await res.text()).slice(0, 200)}`);
+      lastErr.status = res.status;
+      transient = RETRY_STATUS.has(res.status);
+    } catch (e) {
+      // fetch() rejects on network/DNS/CORS failure — treat as transient.
+      lastErr = e instanceof Error ? e : new Error(String(e));
+      transient = true;
+    }
+    if (!transient || attempt === API_ATTEMPTS) throw lastErr;
+    await wait(API_RETRY_BASE_MS * 2 ** (attempt - 1));
+  }
+  throw lastErr;
 }
 
 const $ = (id) => document.getElementById(id);
@@ -36,14 +63,32 @@ const esc = (s) => (s ?? "").replace(/[&<>"]/g, (c) =>
 // While anything is still fetching/converting/synthesizing, re-load the active
 // tab every few seconds so it reports "ready"/"failed" on its own — no manual
 // refresh needed. Only one timer runs at a time; switching tabs cancels it.
+//
+// Polling only runs when there is active work AND the tab is visible: an idle
+// queue never polls, and a backgrounded tab left open all day stops hitting the
+// API (it resumes the moment you look at it) so it can't quietly run up cost.
 const POLL_MS = 4000;
 let pollTimer = null;
 let activeTab = "queue";
 function clearPoll() { if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; } }
 function schedulePoll(tab, reload) {
   clearPoll();
-  pollTimer = setTimeout(() => { if (activeTab === tab) reload(); }, POLL_MS);
+  if (document.hidden) return; // resumed by the visibilitychange handler
+  pollTimer = setTimeout(() => {
+    if (activeTab === tab && !document.hidden) reload();
+  }, POLL_MS);
 }
+
+// Reload the current tab (which reschedules polling if work is still pending).
+function reloadActiveTab() {
+  if (activeTab === "queue") loadQueue();
+  else if (activeTab === "episodes") loadEpisodes();
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) clearPoll();
+  else reloadActiveTab(); // catch up on anything that settled while hidden
+});
 
 // --- Tabs ---
 document.querySelectorAll("nav button").forEach((b) =>
@@ -89,12 +134,27 @@ function populateSourceFilter(items, feedMap) {
   sel.value = opts.some(([id]) => id === current) ? current : "";
 }
 
+// A conversion that entered a working state this long ago (and still hasn't
+// finished) is treated as stranded — a background worker that died or a Polly
+// finalize that never arrived — so the UI stops showing "converting…" forever
+// and offers a retry instead. Mirrors STALE_CONVERT_MS on the backend.
+const CONVERT_STALE_MS = 10 * 60 * 1000;
+const CONVERTING = ["queued", "scripted", "synthesizing"];
+function convertStalled(it) {
+  return CONVERTING.includes(it.convertState) &&
+    (!it.convertStartedAt ||
+      Date.now() - new Date(it.convertStartedAt).getTime() > CONVERT_STALE_MS);
+}
+
 function convertBadge(item) {
   const s = item.convertState;
   if (s === "ready") return `<span class="badge ready">audio ready</span>`;
   if (s === "failed") return `<span class="badge failed">convert failed</span>`;
-  if (["queued", "scripted", "synthesizing"].includes(s))
-    return `<span class="badge working">converting…</span>`;
+  if (CONVERTING.includes(s)) {
+    return convertStalled(item)
+      ? `<span class="badge failed">conversion stalled</span>`
+      : `<span class="badge working">converting…</span>`;
+  }
   if (item.queueStatus === "extract_failed")
     return `<span class="badge failed">extract failed</span>`;
   if (item.queueStatus === "extracted")
@@ -104,8 +164,10 @@ function convertBadge(item) {
 
 /** True while an item is still doing work the UI should watch until it settles. */
 function itemPending(it) {
-  return it.queueStatus === "new" ||
-    ["queued", "scripted", "synthesizing"].includes(it.convertState);
+  if (it.queueStatus === "new") return true;
+  // A stalled conversion is no longer "pending" — stop polling it and let the
+  // user retry, otherwise the queue would poll a stuck item indefinitely.
+  return CONVERTING.includes(it.convertState) && !convertStalled(it);
 }
 
 async function loadQueue() {
@@ -134,9 +196,11 @@ async function loadQueue() {
     } else {
       list.innerHTML = "";
       for (const it of shown) {
+        const stalled = convertStalled(it);
         const canConvert = it.queueStatus === "extracted" &&
-          ["none", "failed"].includes(it.convertState);
-        const convertLabel = it.convertState === "failed" ? "Retry conversion" : "Convert to audio";
+          (["none", "failed"].includes(it.convertState) || stalled);
+        const convertLabel =
+          it.convertState === "failed" || stalled ? "Retry conversion" : "Convert to audio";
         const canReextract = it.queueStatus === "extract_failed";
         const archived = it.readState === "archived";
         const el = document.createElement("div");
@@ -190,6 +254,10 @@ async function loadQueue() {
     if (items.some(itemPending)) schedulePoll("queue", loadQueue);
   } catch (e) {
     if (!list.dataset.loaded) list.innerHTML = `<div class="muted">${esc(e.message)}</div>`;
+    // Don't let a transient error kill the auto-refresh loop: once the queue has
+    // loaded once, keep retrying so live status updates resume on their own when
+    // the API recovers (previously a single blip froze the list until a click).
+    else schedulePoll("queue", loadQueue);
   }
 }
 
@@ -305,6 +373,7 @@ async function loadEpisodes() {
     if (episodes.some((e) => !e.bytes)) schedulePoll("episodes", loadEpisodes);
   } catch (e) {
     if (!list.dataset.loaded) list.innerHTML = `<div class="muted">${esc(e.message)}</div>`;
+    else schedulePoll("episodes", loadEpisodes); // survive transient errors (see loadQueue)
   }
 }
 

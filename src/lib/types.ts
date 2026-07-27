@@ -59,6 +59,12 @@ export interface Item {
   convertState: ConvertState;
   /** Set once conversion produces an Episode. */
   episodeId?: string;
+  /**
+   * When the current conversion attempt entered the `queued` state. Used to
+   * detect a conversion that got stranded (worker died, S3 finalize event lost)
+   * so the UI can offer a retry instead of showing "converting…" forever.
+   */
+  convertStartedAt?: string;
   error?: string;
   addedAt: string;
 }
